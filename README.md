@@ -226,6 +226,10 @@ powershell -File installer/Build-Installer.ps1
 
 [Архитектура](docs/architecture/README.md) · [Статус разработки](STATUS.md)
 
+## Связь
+
+По вопросам о проекте пишите на [titovmihail068@gmail.com](mailto:titovmihail068@gmail.com).
+
 ## Лицензия
 
 📜 Программу можно бесплатно использовать и изменять для личных некоммерческих целей. Если делитесь копией или своей версией, приложите [LICENSE](LICENSE) и сохраните указание автора и ссылку на исходный проект.
