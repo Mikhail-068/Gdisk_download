@@ -55,6 +55,13 @@ Section "Диск Загрузки"
         Abort
     ${EndIf}
 
+    SetOutPath "$INSTDIR\licenses"
+    File "${LICENSE_DIR}\DriveDownload-LICENSE.txt"
+    File "${LICENSE_DIR}\dotnet-runtime-license.txt"
+    File "${LICENSE_DIR}\dotnet-desktop-license.txt"
+    File "${LICENSE_DIR}\dotnet-third-party-notices.txt"
+    File /oname=nsis-licenses.txt "${NSIS_NOTICE}"
+    SetOutPath "$INSTDIR"
     WriteUninstaller "$INSTDIR\Uninstall.exe"
     CreateShortcut "$SMPROGRAMS\Диск Загрузки.lnk" "$INSTDIR\DriveDownload.exe"
     WriteRegStr HKCU "${ARP_KEY}" "DisplayName" "Диск Загрузки"
@@ -74,6 +81,12 @@ Section "Uninstall"
         SetErrorLevel 3
         Abort
     ${EndIf}
+    Delete "$INSTDIR\licenses\DriveDownload-LICENSE.txt"
+    Delete "$INSTDIR\licenses\dotnet-runtime-license.txt"
+    Delete "$INSTDIR\licenses\dotnet-desktop-license.txt"
+    Delete "$INSTDIR\licenses\dotnet-third-party-notices.txt"
+    Delete "$INSTDIR\licenses\nsis-licenses.txt"
+    RMDir "$INSTDIR\licenses"
     Delete "$SMPROGRAMS\Диск Загрузки.lnk"
     DeleteRegKey HKCU "${ARP_KEY}"
     Delete "$INSTDIR\Uninstall.exe"

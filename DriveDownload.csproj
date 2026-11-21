@@ -13,4 +13,17 @@
     <Resource Include="Assets\GoogleDrive.png"/>
     <Resource Include="Assets\StoneTexture.png"/>
   </ItemGroup>
+  <Target Name="CopyPublishLicenses" AfterTargets="Publish"
+          Condition="'$(SelfContained)' == 'true' and '$(RuntimeIdentifier)' == 'win-x64'">
+    <ItemGroup>
+      <_CoreRuntime Include="@(ResolvedRuntimePack)" Condition="'%(ResolvedRuntimePack.FrameworkName)' == 'Microsoft.NETCore.App'"/>
+      <_DesktopRuntime Include="@(ResolvedRuntimePack)" Condition="'%(ResolvedRuntimePack.FrameworkName)' == 'Microsoft.WindowsDesktop.App'"/>
+      <_PublishLicense Include="$(MSBuildProjectDirectory)\LICENSE" Destination="DriveDownload-LICENSE.txt"/>
+      <_PublishLicense Include="@(_CoreRuntime->'%(PackageDirectory)\LICENSE.TXT')" Destination="dotnet-runtime-license.txt"/>
+      <_PublishLicense Include="@(_CoreRuntime->'%(PackageDirectory)\THIRD-PARTY-NOTICES.TXT')" Destination="dotnet-third-party-notices.txt"/>
+      <_PublishLicense Include="@(_DesktopRuntime->'%(PackageDirectory)\LICENSE')" Destination="dotnet-desktop-license.txt"/>
+    </ItemGroup>
+    <Copy SourceFiles="@(_PublishLicense)" DestinationFiles="@(_PublishLicense->'$(PublishDir)licenses\%(Destination)')"
+          SkipUnchangedFiles="true"/>
+  </Target>
 </Project>

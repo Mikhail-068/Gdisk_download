@@ -13,10 +13,25 @@ if (!$OutputPath) { $OutputPath = Join-Path $project 'release\DriveDownload-Setu
 $app = (Resolve-Path -LiteralPath $Application).Path
 $output = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputPath)
 if ($app -eq $output) { throw 'The application and installer must use different paths.' }
-$compiler = Get-Command $MakeNsis -CommandType Application
-New-Item -Path (Split-Path -Parent $output) -ItemType Directory -Force | Out-Null
+$licenses = (Resolve-Path -LiteralPath (Join-Path (Split-Path -Parent $app) 'licenses')).Path
 
-& $compiler.Source "/DAPP_FILE=$app" "/DOUTPUT_FILE=$output" (Join-Path $PSScriptRoot 'DriveDownload.nsi')
+$compiler = Get-Command $MakeNsis -CommandType Application
+$compilerDir = Split-Path -Parent $compiler.Source
+$nsisNotice = Join-Path $compilerDir 'COPYING'
+if (!(Test-Path -LiteralPath $nsisNotice -PathType Leaf)) {
+    $nsisNotice = Join-Path (Split-Path -Parent $compilerDir) 'COPYING'
+}
+$nsisNotice = (Resolve-Path -LiteralPath $nsisNotice).Path
+
+New-Item -Path (Split-Path -Parent $output) -ItemType Directory -Force | Out-Null
+$compilerArguments = @(
+    "/DAPP_FILE=$app"
+    "/DOUTPUT_FILE=$output"
+    "/DLICENSE_DIR=$licenses"
+    "/DNSIS_NOTICE=$nsisNotice"
+    (Join-Path $PSScriptRoot 'DriveDownload.nsi')
+)
+& $compiler.Source @compilerArguments
 if ($LASTEXITCODE -ne 0 -or !(Test-Path -LiteralPath $output -PathType Leaf)) {
     throw 'NSIS did not build the installer.'
 }
