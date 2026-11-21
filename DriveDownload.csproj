@@ -11,5 +11,6 @@
   <ItemGroup>
     <Compile Remove="tests\**\*.cs"/>
     <Resource Include="Assets\GoogleDrive.png"/>
+    <Resource Include="Assets\StoneTexture.png"/>
   </ItemGroup>
 </Project>

@@ -7,6 +7,94 @@
         FontFamily="Segoe UI Variable Text, Segoe UI" FontSize="14" Foreground="{StaticResource TextBrush}"
         UseLayoutRounding="True" SnapsToDevicePixels="True">
   <Window.Resources>
+    <Storyboard x:Key="FolderReadingAnimation" RepeatBehavior="Forever">
+      <DoubleAnimationUsingKeyFrames Storyboard.TargetName="PageJump" Storyboard.TargetProperty="Y">
+        <EasingDoubleKeyFrame KeyTime="0:0:0" Value="0"/>
+        <EasingDoubleKeyFrame KeyTime="0:0:0.55" Value="-13">
+          <EasingDoubleKeyFrame.EasingFunction><SineEase EasingMode="EaseOut"/></EasingDoubleKeyFrame.EasingFunction>
+        </EasingDoubleKeyFrame>
+        <EasingDoubleKeyFrame KeyTime="0:0:1.2" Value="0">
+          <EasingDoubleKeyFrame.EasingFunction><SineEase EasingMode="EaseInOut"/></EasingDoubleKeyFrame.EasingFunction>
+        </EasingDoubleKeyFrame>
+        <EasingDoubleKeyFrame KeyTime="0:0:1.52" Value="-5">
+          <EasingDoubleKeyFrame.EasingFunction><SineEase EasingMode="EaseInOut"/></EasingDoubleKeyFrame.EasingFunction>
+        </EasingDoubleKeyFrame>
+        <EasingDoubleKeyFrame KeyTime="0:0:1.84" Value="0">
+          <EasingDoubleKeyFrame.EasingFunction><SineEase EasingMode="EaseInOut"/></EasingDoubleKeyFrame.EasingFunction>
+        </EasingDoubleKeyFrame>
+        <EasingDoubleKeyFrame KeyTime="0:0:2.2" Value="0"/>
+      </DoubleAnimationUsingKeyFrames>
+      <DoubleAnimationUsingKeyFrames Storyboard.TargetName="PageTilt" Storyboard.TargetProperty="Angle">
+        <EasingDoubleKeyFrame KeyTime="0:0:0" Value="-11"/>
+        <EasingDoubleKeyFrame KeyTime="0:0:0.68" Value="12">
+          <EasingDoubleKeyFrame.EasingFunction><SineEase EasingMode="EaseInOut"/></EasingDoubleKeyFrame.EasingFunction>
+        </EasingDoubleKeyFrame>
+        <EasingDoubleKeyFrame KeyTime="0:0:1.84" Value="-11">
+          <EasingDoubleKeyFrame.EasingFunction><SineEase EasingMode="EaseInOut"/></EasingDoubleKeyFrame.EasingFunction>
+        </EasingDoubleKeyFrame>
+        <EasingDoubleKeyFrame KeyTime="0:0:2.2" Value="-11"/>
+      </DoubleAnimationUsingKeyFrames>
+      <DoubleAnimationUsingKeyFrames Storyboard.TargetName="MintSpark" Storyboard.TargetProperty="Opacity">
+        <LinearDoubleKeyFrame KeyTime="0:0:0" Value=".55"/>
+        <LinearDoubleKeyFrame KeyTime="0:0:0.55" Value="1"/>
+        <LinearDoubleKeyFrame KeyTime="0:0:1.2" Value=".25"/>
+        <LinearDoubleKeyFrame KeyTime="0:0:2.2" Value=".55"/>
+      </DoubleAnimationUsingKeyFrames>
+      <DoubleAnimationUsingKeyFrames Storyboard.TargetName="PinkSpark" Storyboard.TargetProperty="Opacity">
+        <LinearDoubleKeyFrame KeyTime="0:0:0" Value=".75"/>
+        <LinearDoubleKeyFrame KeyTime="0:0:0.55" Value=".28"/>
+        <LinearDoubleKeyFrame KeyTime="0:0:1.45" Value="1"/>
+        <LinearDoubleKeyFrame KeyTime="0:0:2.2" Value=".75"/>
+      </DoubleAnimationUsingKeyFrames>
+    </Storyboard>
+    <Style x:Key="YellowPickerButton" TargetType="Button" BasedOn="{StaticResource ButtonBase}">
+      <Setter Property="Foreground" Value="#F4D477"/>
+      <Setter Property="BorderBrush" Value="#81703C"/>
+      <Setter Property="Background">
+        <Setter.Value>
+          <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#423820" Offset="0"/>
+            <GradientStop Color="#352E20" Offset="1"/>
+          </LinearGradientBrush>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="BluePickerButton" TargetType="Button" BasedOn="{StaticResource ButtonBase}">
+      <Setter Property="Foreground" Value="#B3CEF9"/>
+      <Setter Property="BorderBrush" Value="#506B96"/>
+      <Setter Property="Background">
+        <Setter.Value>
+          <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#2C3A52" Offset="0"/>
+            <GradientStop Color="#243043" Offset="1"/>
+          </LinearGradientBrush>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="RedPickerButton" TargetType="Button" BasedOn="{StaticResource ButtonBase}">
+      <Setter Property="Foreground" Value="#FABCB8"/>
+      <Setter Property="BorderBrush" Value="#855358"/>
+      <Setter Property="Background">
+        <Setter.Value>
+          <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#462C31" Offset="0"/>
+            <GradientStop Color="#39272C" Offset="1"/>
+          </LinearGradientBrush>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="GreenPickerButton" TargetType="Button" BasedOn="{StaticResource ButtonBase}">
+      <Setter Property="Foreground" Value="#E2F5E7"/>
+      <Setter Property="BorderBrush" Value="#5D9C70"/>
+      <Setter Property="Background">
+        <Setter.Value>
+          <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#345E42" Offset="0"/>
+            <GradientStop Color="#294C36" Offset="1"/>
+          </LinearGradientBrush>
+        </Setter.Value>
+      </Setter>
+    </Style>
     <Style x:Key="CatalogCheck" TargetType="CheckBox">
       <Setter Property="Width" Value="23"/>
       <Setter Property="Height" Value="25"/>
@@ -116,28 +204,68 @@
       <TextBlock Name="FolderTitle" Text="Google Drive" Foreground="{StaticResource Muted}" Margin="0,4,0,0" TextTrimming="CharacterEllipsis"/>
     </StackPanel>
     <DockPanel Grid.Row="1" Margin="0,0,0,10" LastChildFill="False">
-      <Button Name="Reload" DockPanel.Dock="Right" Content="Обновить" Click="ReloadClick" MinHeight="32" Padding="13,5"/>
-      <Button Name="SelectAll" Content="Выбрать всё" Click="SelectAllClick" MinHeight="32" Padding="13,5" IsEnabled="False" Margin="0,0,8,0"/>
-      <Button Name="SelectNone" Content="Снять выбор" Click="SelectNoneClick" MinHeight="32" Padding="13,5" IsEnabled="False"/>
+      <Button Name="Reload" Style="{StaticResource BluePickerButton}" DockPanel.Dock="Right" Content="Обновить" Click="ReloadClick" MinHeight="32" Padding="13,5"/>
+      <Button Name="SelectAll" Style="{StaticResource YellowPickerButton}" Content="Выбрать всё" Click="SelectAllClick" MinHeight="32" Padding="13,5" IsEnabled="False" Margin="0,0,8,0"/>
+      <Button Name="SelectNone" Style="{StaticResource BluePickerButton}" Content="Снять выбор" Click="SelectNoneClick" MinHeight="32" Padding="13,5" IsEnabled="False"/>
     </DockPanel>
-    <Border Grid.Row="2" Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource Rule}" BorderThickness="1"
+    <Border Grid.Row="2" Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource PanelEdgeBrush}" BorderThickness="1"
             CornerRadius="12" Padding="9,7,9,7">
       <Grid>
         <TreeView Name="ContentsTree" Background="Transparent" BorderThickness="0" Foreground="{StaticResource TextBrush}"
                   ItemContainerStyle="{StaticResource CatalogRow}" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                   ScrollViewer.CanContentScroll="True" VirtualizingPanel.IsVirtualizing="True"
                   VirtualizingPanel.VirtualizationMode="Recycling" AutomationProperties.Name="Содержимое папки"/>
-        <TextBlock Name="Notice" Text="Читаем папку Google Drive…" VerticalAlignment="Center" HorizontalAlignment="Center"
-                   Margin="16" Foreground="{StaticResource Muted}" TextAlignment="Center" TextWrapping="Wrap"/>
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="16">
+          <Canvas Name="ReadingIllustration" Width="132" Height="92" Margin="0,0,0,9" IsHitTestVisible="False">
+            <Ellipse Canvas.Left="25" Canvas.Top="77" Width="84" Height="11" Fill="#60000000"/>
+            <Path Fill="#CF8D26" Data="M24,68 V44 Q24,38 30,38 H51 Q55,38 59,43 H98 Q105,43 105,50 V72 Z"/>
+            <Path Stroke="#F7C65D" StrokeThickness="1.5" StrokeStartLineCap="Round"
+                  Data="M27,50 V45 Q27,41 32,41 H50"/>
+            <Canvas Canvas.Left="49" Canvas.Top="19" Width="35" Height="43" RenderTransformOrigin=".5,.7">
+              <Canvas.RenderTransform>
+                <TransformGroup>
+                  <RotateTransform x:Name="PageTilt" Angle="-11"/>
+                  <TranslateTransform x:Name="PageJump"/>
+                </TransformGroup>
+              </Canvas.RenderTransform>
+              <Path Fill="#8CBFFF" Data="M5,1 H23 L34,12 V37 Q34,42 29,42 H6 Q1,42 1,37 V6 Q1,1 5,1 Z"/>
+              <Path Fill="#4A7FC9" Data="M23,1 L34,12 H25 Q23,12 23,10 Z"/>
+              <Path Stroke="#F2F7FF" StrokeThickness="2.2" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                    Data="M8,19 H25 M8,25 H21"/>
+            </Canvas>
+            <Path Data="M26,51 H108 Q114,51 112,58 L106,75 Q104,81 98,81 H34 Q27,81 25,75 L21,58 Q20,51 26,51 Z">
+              <Path.Fill>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                  <GradientStop Color="#FFE18C" Offset="0"/>
+                  <GradientStop Color="#EDAF43" Offset="1"/>
+                </LinearGradientBrush>
+              </Path.Fill>
+            </Path>
+            <Path Stroke="#FFF2BC" StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                  Data="M28,54 H105"/>
+            <Ellipse Canvas.Left="53" Canvas.Top="60" Width="4" Height="5.5" Fill="#573C18"/>
+            <Ellipse Canvas.Left="76" Canvas.Top="60" Width="4" Height="5.5" Fill="#573C18"/>
+            <Path Stroke="#573C18" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                  Data="M62,66 Q66.5,72 71,66"/>
+            <Ellipse Canvas.Left="45" Canvas.Top="66" Width="6" Height="3.5" Fill="#E98E73"/>
+            <Ellipse Canvas.Left="82" Canvas.Top="66" Width="6" Height="3.5" Fill="#E98E73"/>
+            <Path Name="MintSpark" Fill="#7CDECA" Opacity=".55"
+                  Data="M29,16 L31.1,22.9 L38,25 L31.1,27.1 L29,34 L26.9,27.1 L20,25 L26.9,22.9 Z"/>
+            <Path Name="PinkSpark" Fill="#F38DB8" Opacity=".75"
+                  Data="M104,9 L106.1,15.9 L113,18 L106.1,20.1 L104,27 L101.9,20.1 L95,18 L101.9,15.9 Z"/>
+          </Canvas>
+          <TextBlock Name="Notice" Text="Читаем папку Google Drive…" Foreground="{StaticResource Muted}"
+                     TextAlignment="Center" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite"/>
+        </StackPanel>
       </Grid>
     </Border>
     <Grid Grid.Row="3" Margin="0,14,0,0">
       <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
       <TextBlock Name="Choice" Text="Нет выбранных файлов" Foreground="{StaticResource Muted}" VerticalAlignment="Center"
                  TextTrimming="CharacterEllipsis" Margin="0,0,10,0" AutomationProperties.LiveSetting="Polite"/>
-      <Button Grid.Column="1" IsCancel="True" Content="Закрыть" Margin="0,0,8,0"/>
+      <Button Grid.Column="1" Style="{StaticResource RedPickerButton}" IsCancel="True" Content="Закрыть" Margin="0,0,8,0"/>
       <Button Grid.Column="2" Name="Accept" Content="Скачать выбранное" Tag="{StaticResource DownloadIcon}"
-              Style="{StaticResource Primary}" Click="AcceptClick" IsEnabled="False"/>
+              Style="{StaticResource GreenPickerButton}" Click="AcceptClick" IsEnabled="False"/>
     </Grid>
   </Grid>
 </Window>

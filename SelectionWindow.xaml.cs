@@ -3,6 +3,7 @@ using System.IO;
 using System.Net.Http;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media.Animation;
 
 namespace DriveDownload;
 
@@ -21,7 +22,11 @@ public partial class SelectionWindow : Window
         this.credentials = credentials;
         selection = previous ?? [];
         InitializeComponent();
-        SourceInitialized += (_, _) => DarkChrome.Apply(this);
+        SourceInitialized += (_, _) =>
+        {
+            DarkChrome.Apply(this);
+            WindowBackdrop.Apply(this);
+        };
         Loaded += async (_, _) => await Read();
         Closed += (_, _) => { closed = true; reading?.Cancel(); };
     }
@@ -43,8 +48,13 @@ public partial class SelectionWindow : Window
         roots = [];
         Notice.Text = "Читаем папку Google Drive…";
         Notice.Visibility = Visibility.Visible;
+        ReadingIllustration.Visibility = Visibility.Visible;
+        var animation = SystemParameters.ClientAreaAnimation
+            ? (Storyboard)FindResource("FolderReadingAnimation")
+            : null;
         try
         {
+            animation?.Begin(this, isControllable: true);
             var catalog = await Task.Run(async () =>
             {
                 using var drive = new GoogleDrive(credentials);
@@ -68,6 +78,8 @@ public partial class SelectionWindow : Window
         }
         finally
         {
+            animation?.Remove(this);
+            ReadingIllustration.Visibility = Visibility.Collapsed;
             reading = null;
             if (!closed)
             {

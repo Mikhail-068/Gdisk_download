@@ -30,7 +30,11 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        SourceInitialized += (_, _) => DarkChrome.Apply(this);
+        SourceInitialized += (_, _) =>
+        {
+            DarkChrome.Apply(this);
+            WindowBackdrop.Apply(this);
+        };
         Queue.ItemsSource = rows;
         Link.TextChanged += (_, _) => UpdateStartLabel();
         Destination.TextChanged += (_, _) => UpdateStartLabel();
@@ -61,10 +65,9 @@ public partial class MainWindow : Window
 
     private void SetAccount()
     {
-        Account.Content = credentials?.RefreshToken is not null ? "Google подключён" :
-            credentials?.ApiKey is not null ? "Доступ по ключу API" : "Подключить Google";
-        Account.ToolTip = "Параметры доступа к Google Drive";
-        Account.Tag = FindResource(credentials?.Ready == true ? "CheckIcon" : "LinkIcon");
+        AccountStatus.Text = !string.IsNullOrEmpty(credentials?.RefreshToken) ? "Google подключён" :
+            credentials?.Ready == true ? "Доступ по ключу API" : "Google не подключён";
+        AccountLamp.Fill = (Brush)FindResource(credentials?.Ready == true ? "SuccessBrush" : "ErrorBrush");
     }
 
     private async void AccountClick(object sender, RoutedEventArgs e) => await Configure();
