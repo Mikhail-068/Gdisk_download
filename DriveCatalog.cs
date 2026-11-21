@@ -1,10 +1,12 @@
 using System.IO;
 using System.Text.RegularExpressions;
 
+using static DriveDownload.L;
+
 namespace DriveDownload;
 
 internal sealed record CatalogItem(string Key, string Name, string Relative, RemoteFile Remote,
-    CatalogItem[] Children, string? Export = null, string? Problem = null)
+    CatalogItem[] Children, string? Export = null, Phrase? Problem = null)
 {
     public bool IsFolder => Remote.MimeType == RemoteFile.Folder;
     public long Size => IsFolder || Export is not null ? 0 : Math.Max(0, Remote.Length);
@@ -39,7 +41,7 @@ internal sealed class DriveCatalog(GoogleDrive drive)
         drive.AddResource(link.Id, link.ResourceKey);
         var folder = await drive.Get(link.Id, ct).ConfigureAwait(false);
         if (folder.MimeType != RemoteFile.Folder)
-            throw new DriveFailure("Ссылка должна вести на папку Google Drive.");
+            throw new DriveFailure(PhraseFor("MustBeFolder"));
 
         var rootName = Unique(SafeName(folder.Name), null, new(StringComparer.OrdinalIgnoreCase));
         if (rootName.Equals(CacheDirectory, StringComparison.OrdinalIgnoreCase)) rootName += " (Drive)";
@@ -51,7 +53,7 @@ internal sealed class DriveCatalog(GoogleDrive drive)
         HashSet<string> ancestors, CancellationToken ct)
     {
         if (!ancestors.Add(folder.Id))
-            throw new DriveFailure("Ярлык образует цикл папок.");
+            throw new DriveFailure(PhraseFor("ShortcutLoop"));
         try
         {
             drive.AddResource(folder.Id, folder.ResourceKey);
@@ -69,7 +71,7 @@ internal sealed class DriveCatalog(GoogleDrive drive)
                 {
                     try
                     {
-                        var shortcut = alias.ShortcutDetails ?? throw new DriveFailure("Цель ярлыка недоступна.");
+                        var shortcut = alias.ShortcutDetails ?? throw new DriveFailure(PhraseFor("ShortcutUnavailable"));
                         drive.AddResource(shortcut.TargetId, shortcut.TargetResourceKey);
                         child = await drive.Get(shortcut.TargetId, ct).ConfigureAwait(false);
                         drive.AddResource(child.Id, child.ResourceKey);
@@ -77,7 +79,7 @@ internal sealed class DriveCatalog(GoogleDrive drive)
                     catch (DriveFailure e) when (!e.Retry && !e.Reconnect)
                     {
                         var failedName = Unique(SafeName(alias.Name), null, names);
-                        items.Add(new(key, failedName, Path.Combine(prefix, failedName), alias, [], Problem: e.Message));
+                        items.Add(new(key, failedName, Path.Combine(prefix, failedName), alias, [], Problem: e.Text));
                         continue;
                     }
                 }
@@ -94,13 +96,13 @@ internal sealed class DriveCatalog(GoogleDrive drive)
                     }
                     catch (DriveFailure e) when (!e.Retry && !e.Reconnect)
                     {
-                        items.Add(new(key, name, relative, child, [], Problem: e.Message));
+                        items.Add(new(key, name, relative, child, [], Problem: e.Text));
                     }
                 }
                 else
                 {
-                    var problem = child.Capabilities?.CanDownload == false ? "Владелец запретил скачивание." :
-                        export.Mime is null && child.Length < 0 ? "Этот тип Google Workspace нельзя скачать как обычный файл." : null;
+                    var problem = child.Capabilities?.CanDownload == false ? PhraseFor("OwnerBlocked") :
+                        export.Mime is null && child.Length < 0 ? PhraseFor("ExportUnsupported") : null;
                     items.Add(new(key, name, relative, child, [], export.Mime, problem));
                 }
             }

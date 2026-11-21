@@ -1,7 +1,10 @@
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+
+using static DriveDownload.L;
 
 namespace DriveDownload;
 
@@ -17,6 +20,17 @@ internal static class State
         Environment.SpecialFolder.LocalApplicationData), "DriveDownload");
     private static readonly string JobPath = Path.Combine(Root, "job.json");
     private static readonly string CredentialsPath = Path.Combine(Root, "connection.bin");
+
+    private static readonly string LanguagePath = Path.Combine(Root, "language.txt");
+
+    internal static bool ReadEnglishPreference()
+    {
+        try { return File.ReadAllText(LanguagePath).Trim() == "en"; }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return false; }
+    }
+
+    internal static void WriteLanguage(bool english) =>
+        WriteAtomic(LanguagePath, Encoding.UTF8.GetBytes(english ? "en" : "ru"));
 
     internal static Job? ReadJob() => File.Exists(JobPath)
         ? JsonSerializer.Deserialize<Job>(File.ReadAllBytes(JobPath)) : null;
@@ -47,7 +61,7 @@ internal static class State
             var ok = decrypt
                 ? CryptUnprotectData(ref input, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, 1, out var output)
                 : CryptProtectData(ref input, null, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, 1, out output);
-            if (!ok) throw new InvalidOperationException("Windows не смог открыть защищённые данные подключения.");
+            if (!ok) throw new InvalidOperationException(Tr("ProtectedDataFailed"));
             try
             {
                 var result = new byte[output.Size];
@@ -83,7 +97,7 @@ internal sealed record FolderLink(string Id, string? ResourceKey)
         if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri) || uri.Scheme != "https" ||
             !uri.Host.Equals("drive.google.com", StringComparison.OrdinalIgnoreCase) || !uri.IsDefaultPort ||
             uri.UserInfo.Length > 0)
-            throw new ArgumentException("Вставьте HTTPS-ссылку на папку Google Drive.");
+            throw new LocalizedArgumentException(PhraseFor("HttpsLinkRequired"));
 
         var segments = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
         var index = Array.IndexOf(segments, "folders");
@@ -92,7 +106,7 @@ internal sealed record FolderLink(string Id, string? ResourceKey)
             uri.AbsolutePath == "/open" ? query["id"] : null;
         var resourceKey = query["resourcekey"];
         if (id is null || !Token.IsMatch(id) || (resourceKey is not null && !Token.IsMatch(resourceKey)))
-            throw new ArgumentException("В ссылке не найден идентификатор папки Google Drive.");
+            throw new LocalizedArgumentException(PhraseFor("InvalidFolderId"));
         return new(id, resourceKey);
     }
 }

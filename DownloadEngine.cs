@@ -1,21 +1,22 @@
-using System.Globalization;
 using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
 
+using static DriveDownload.L;
+
 namespace DriveDownload;
 
-internal sealed class Transfer(RemoteFile remote, string relative, string? export = null, string? problem = null)
+internal sealed class Transfer(RemoteFile remote, string relative, string? export = null, Phrase? problem = null)
 {
     public RemoteFile Remote { get; } = remote;
     public string Relative { get; } = relative;
     public string? Export { get; } = export;
     public long Size => Export is null ? Math.Max(0, Remote.Length) : 0;
     public long Bytes;
-    public volatile string Status = "В очереди";
-    public volatile string? Error = problem;
+    public volatile Phrase Status = PhraseFor("Queued");
+    public volatile Phrase? Error = problem;
     public volatile bool Done;
     public DateTimeOffset RetryAt;
     public int Attempts;
@@ -28,24 +29,24 @@ internal sealed class DownloadEngine(GoogleDrive drive, Job job)
     private string cache = "";
     public Transfer[] Entries => entries;
     public string? LocalFolder { get; private set; }
-    public volatile string Message = "Читаем папку Google Drive…";
+    public volatile Phrase Message = PhraseFor("ReadingFolder");
     private long received;
     public long Received => Interlocked.Read(ref received);
 
     public async Task Run(CancellationToken ct)
     {
         var link = FolderLink.Parse(job.Link);
-        if (!Guid.TryParseExact(job.CacheId, "N", out _)) throw new IOException("Не удалось открыть кэш задания.");
+        if (!Guid.TryParseExact(job.CacheId, "N", out _)) throw new LocalizedIOException(PhraseFor("CacheFailed"));
         var root = Path.GetFullPath(job.Destination);
         var selection = job.SelectedKeys?.ToHashSet(StringComparer.Ordinal);
         if (selection is { Count: 0 })
-            throw new DriveFailure("Отметьте файлы или папки для скачивания.");
+            throw new DriveFailure(PhraseFor("SelectSomething"));
 
         var catalog = await ReadCatalog(link, ct);
         var chosen = catalog.Flatten().Where(x => selection is null || selection.Contains(x.Key)).ToArray();
         var missing = selection is null ? 0 : selection.Count - chosen.Length;
         if (missing > 0 && chosen.Length == 0)
-            throw new DriveFailure("Отмеченных объектов больше нет в папке Google Drive.");
+            throw new DriveFailure(PhraseFor("SelectionMissing"));
 
         EnsureDirectory(root);
         cache = Path.Combine(root, DriveCatalog.CacheDirectory, job.CacheId);
@@ -58,7 +59,7 @@ internal sealed class DownloadEngine(GoogleDrive drive, Job job)
         {
             ct.ThrowIfCancellationRequested();
             if (item.Problem is not null)
-                downloads.Add(new(item.Remote, item.Relative, item.Export, item.Problem) { Status = "Ошибка" });
+                downloads.Add(new(item.Remote, item.Relative, item.Export, item.Problem) { Status = PhraseFor("Error") });
             else if (!item.IsFolder)
                 downloads.Add(new(item.Remote, item.Relative, item.Export));
             else if (item.Children.Length == 0)
@@ -66,18 +67,18 @@ internal sealed class DownloadEngine(GoogleDrive drive, Job job)
                 try { EnsureDirectory(Path.Combine(LocalFolder, item.Relative)); }
                 catch (Exception e) when (e is IOException or UnauthorizedAccessException)
                 {
-                    downloads.Add(new(item.Remote, item.Relative, problem: e.Message) { Status = "Ошибка" });
+                    downloads.Add(new(item.Remote, item.Relative, problem: Phrase.From(e)) { Status = PhraseFor("Error") });
                 }
             }
         }
         entries = [.. downloads];
-        Message = "Сверяем локальные файлы…";
+        Message = PhraseFor("CheckingLocal");
         foreach (var item in entries.Where(x => x.Error is null))
         {
             ct.ThrowIfCancellationRequested();
             try { await Prepare(item, ct); }
-            catch (IOException e) { Fail(item, e.Message); }
-            catch (UnauthorizedAccessException e) { Fail(item, e.Message); }
+            catch (IOException e) { Fail(item, Phrase.From(e)); }
+            catch (UnauthorizedAccessException e) { Fail(item, Phrase.From(e)); }
         }
 
         while (true)
@@ -87,23 +88,23 @@ internal sealed class DownloadEngine(GoogleDrive drive, Job job)
             if (pending.Length == 0)
             {
                 Message = missing > 0
-                    ? $"Завершено. Отмеченных объектов, которых больше нет в папке: {missing}."
+                    ? PhraseFor("CompletedMissing").Format(missing)
                     : entries.Any(x => x.Error is not null)
-                    ? "Завершено с ошибками. Подробности в списке."
-                    : "Загрузка завершена.";
+                    ? PhraseFor("CompletedWithErrors")
+                    : PhraseFor("DownloadComplete");
                 return;
             }
             var ready = pending.Where(x => x.RetryAt <= DateTimeOffset.Now).ToArray();
             if (ready.Length == 0)
             {
                 var next = pending.MinBy(x => x.RetryAt)!;
-                Message = $"{next.Status} Повтор в {next.RetryAt.LocalDateTime:HH:mm:ss}.";
+                Message = PhraseFor("RetryAt").Format(next.Status, next.RetryAt.LocalDateTime);
                 var wait = next.RetryAt - DateTimeOffset.Now;
                 if (wait > TimeSpan.Zero) await Task.Delay(wait, ct);
                 continue;
             }
 
-            Message = "Получаем файлы с Google Drive";
+            Message = PhraseFor("ReceivingFiles");
             await Parallel.ForEachAsync(ready, new ParallelOptions { MaxDegreeOfParallelism = 3, CancellationToken = ct },
                 async (item, token) =>
                 {
@@ -117,7 +118,7 @@ internal sealed class DownloadEngine(GoogleDrive drive, Job job)
                     catch (Exception e) when (!token.IsCancellationRequested &&
                         e is IOException or UnauthorizedAccessException or DriveFailure)
                     {
-                        Fail(item, e.Message);
+                        Fail(item, Phrase.From(e));
                     }
                 });
         }
@@ -131,13 +132,13 @@ internal sealed class DownloadEngine(GoogleDrive drive, Job job)
         {
             try
             {
-                Message = "Читаем папку Google Drive…";
+                Message = PhraseFor("ReadingFolder");
                 return await source.Read(link, ct);
             }
             catch (Exception e) when (!ct.IsCancellationRequested && IsTransient(e))
             {
                 var pause = RetryDelay(e, ++tries);
-                Message = $"{Describe(e)} Повтор в {DateTime.Now.Add(pause):HH:mm:ss}.";
+                Message = PhraseFor("RetryAt").Format(Describe(e), DateTime.Now.Add(pause));
                 await Task.Delay(pause, ct);
             }
         }
@@ -155,11 +156,11 @@ internal sealed class DownloadEngine(GoogleDrive drive, Job job)
                 item.Export is null && await Matches(item, target, ct))
             {
                 item.Bytes = item.Size;
-                item.Status = "Уже на диске";
+                item.Status = PhraseFor("AlreadyLocal");
                 item.Done = true;
                 return;
             }
-            Fail(item, "В папке есть файл с этим именем и другим содержимым. Выберите другую папку или переместите локальный файл.");
+            Fail(item, PhraseFor("LocalConflict"));
             return;
         }
 
@@ -189,48 +190,48 @@ internal sealed class DownloadEngine(GoogleDrive drive, Job job)
 
         if (item.Export is not null || offset != item.Size || !File.Exists(part))
         {
-            item.Status = offset > 0 ? "Продолжаем с " + BytesFormat(offset) : "Скачиваем";
+            item.Status = offset > 0 ? PhraseFor("ResumingAt").Format(new Phrase(FormatBytes(offset, english: false), FormatBytes(offset, english: true))) : PhraseFor("Downloading");
             using var response = await drive.Content(item.Remote, item.Export, offset, ct);
             var content = response.Content;
             if (content.Headers.TryGetValues("Content-Encoding", out var encodings) &&
                 encodings.Any(x => !x.Equals("identity", StringComparison.OrdinalIgnoreCase)))
-                throw new DriveFailure("Google вернул неожиданное кодирование файла.");
+                throw new DriveFailure(PhraseFor("UnknownEncoding"));
             if (string.Equals(content.Headers.ContentType?.MediaType, "text/html", StringComparison.OrdinalIgnoreCase) &&
                 (item.Export is not null || !item.Remote.MimeType.Equals("text/html", StringComparison.OrdinalIgnoreCase)))
-                throw new DriveFailure("Drive вернул веб-страницу вместо файла.", retry: true);
+                throw new DriveFailure(PhraseFor("PageInsteadOfFile"), retry: true);
             if (response.StatusCode == HttpStatusCode.PartialContent)
             {
                 var range = content.Headers.ContentRange;
                 if (item.Export is not null || range?.From != offset || range.Length != item.Size ||
                     range.To is not long last || last < offset || last >= item.Size ||
                     content.Headers.ContentLength is long declared && declared != last - offset + 1)
-                    throw new DriveFailure("Google вернул неверный диапазон байтов.", retry: true);
+                    throw new DriveFailure(PhraseFor("BadRange"), retry: true);
             }
             else if (response.StatusCode == HttpStatusCode.OK)
             {
                 if (item.Export is null && content.Headers.ContentLength is long declared && declared != item.Size)
-                    throw new DriveFailure("Размер ответа Drive отличается от размера файла.");
+                    throw new DriveFailure(PhraseFor("WrongResponseSize"));
                 offset = 0;
             }
             else
             {
-                throw new DriveFailure("Drive больше не принимает сохранённое смещение. Обновите список папки.");
+                throw new DriveFailure(PhraseFor("OffsetRejected"));
             }
             item.Bytes = offset;
             var length = item.Export is not null ? content.Headers.ContentLength :
                 response.StatusCode == HttpStatusCode.PartialContent ? content.Headers.ContentRange!.To!.Value - offset + 1 : item.Size;
             await Receive(item, response, part, offset, length, ct);
             if (item.Export is null && new FileInfo(part).Length < item.Size)
-                throw new DriveFailure("Drive передал часть файла. Продолжаем с сохранённого места.", retry: true);
+                throw new DriveFailure(PhraseFor("PartialTransfer"), retry: true);
         }
 
-        item.Status = "Проверяем файл";
+        item.Status = PhraseFor("CheckingFile");
         if (item.Export is null && !await Matches(item, part, ct))
         {
             File.Delete(part);
             item.Bytes = 0;
             var retry = ++item.InvalidChecksums < 3;
-            throw new DriveFailure("Проверка файла не прошла. Drive мог изменить исходный файл.", retry: retry);
+            throw new DriveFailure(PhraseFor("FileCheckFailed"), retry: retry);
         }
         if (item.Export is not null)
         {
@@ -239,7 +240,7 @@ internal sealed class DownloadEngine(GoogleDrive drive, Job job)
         }
         CheckLinkIfPresent(target);
         File.Move(part, target);
-        item.Status = "Готово";
+        item.Status = PhraseFor("Ready");
         item.Done = true;
     }
 
@@ -260,13 +261,13 @@ internal sealed class DownloadEngine(GoogleDrive drive, Job job)
                 timeout.CancelAfter(TimeSpan.FromSeconds(30));
                 int read;
                 try { read = await body.ReadAsync(rented.AsMemory(), timeout.Token); }
-                catch (IOException) { throw new DriveFailure("Связь с Drive прервалась.", retry: true); }
+                catch (IOException) { throw new DriveFailure(PhraseFor("DriveInterrupted"), retry: true); }
                 if (read == 0) break;
                 if (count is long max && total + read > max)
                 {
                     file.SetLength(offset);
                     item.Bytes = offset;
-                    throw new DriveFailure("Drive прислал больше данных, чем ожидалось.");
+                    throw new DriveFailure(PhraseFor("TooManyBytes"));
                 }
                 await file.WriteAsync(rented.AsMemory(0, read), ct);
                 total += read;
@@ -274,7 +275,7 @@ internal sealed class DownloadEngine(GoogleDrive drive, Job job)
                 Interlocked.Exchange(ref item.Bytes, offset + total);
             }
             if (count is long required && required != total)
-                throw new DriveFailure("Связь с Drive прервалась.", retry: true);
+                throw new DriveFailure(PhraseFor("DriveInterrupted"), retry: true);
         }
         finally { System.Buffers.ArrayPool<byte>.Shared.Return(rented); }
     }
@@ -315,13 +316,13 @@ internal sealed class DownloadEngine(GoogleDrive drive, Job job)
     private static void CheckLink(string path)
     {
         if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
-            throw new IOException($"Путь содержит ссылку или точку подключения: {path}");
+            throw new LocalizedIOException(PhraseFor("ReparsePoint").Format(path));
     }
 
-    private static void Fail(Transfer item, string message)
+    private static void Fail(Transfer item, Phrase message)
     {
         item.Error = message;
-        item.Status = "Ошибка";
+        item.Status = PhraseFor("Error");
     }
 
     private static bool IsTransient(Exception e) => e is DriveFailure { Retry: true } or HttpRequestException
@@ -333,15 +334,21 @@ internal sealed class DownloadEngine(GoogleDrive drive, Job job)
         return e is DriveFailure { Delay: TimeSpan server } && server > delay ? server : delay;
     }
 
-    private static string Describe(Exception e) => e is DriveFailure ? e.Message :
-        "Связь с Google Drive прервана.";
+    private static Phrase Describe(Exception e) => e is DriveFailure driveError ? driveError.Text :
+        PhraseFor("ConnectionInterrupted");
 
-    public static string BytesFormat(long value)
+    private static readonly string[] RussianUnits = ["Б", "КБ", "МБ", "ГБ", "ТБ"];
+    private static readonly string[] EnglishUnits = ["B", "KB", "MB", "GB", "TB"];
+
+    public static string BytesFormat(long value) => FormatBytes(value, IsEnglish);
+
+    private static string FormatBytes(long value, bool english)
     {
-        string[] units = ["Б", "КБ", "МБ", "ГБ", "ТБ"];
+        var units = english ? EnglishUnits : RussianUnits;
         double size = value;
         var unit = 0;
         while (size >= 1024 && unit < units.Length - 1) { size /= 1024; unit++; }
-        return $"{size.ToString(unit == 0 ? "0" : "0.#", CultureInfo.GetCultureInfo("ru-RU"))} {units[unit]}";
+        var format = unit == 0 ? "0" : "0.#";
+        return $"{size.ToString(format, english ? EnglishCulture : RussianCulture)} {units[unit]}";
     }
 }

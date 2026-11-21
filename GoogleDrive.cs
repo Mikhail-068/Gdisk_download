@@ -10,11 +10,15 @@ using System.Text;
 using System.Text.Json;
 using System.Web;
 
+using static DriveDownload.L;
+
 namespace DriveDownload;
 
-internal sealed class DriveFailure(string message, bool retry = false, bool quota = false,
-    bool reconnect = false, TimeSpan? delay = null) : Exception(message)
+internal sealed class DriveFailure(Phrase text, bool retry = false, bool quota = false,
+    bool reconnect = false, TimeSpan? delay = null) : Exception, ILocalizedError
 {
+    public Phrase Text { get; } = text;
+    public override string Message => Text.Current;
     public bool Retry { get; } = retry;
     public bool Quota { get; } = quota;
     public bool Reconnect { get; } = reconnect;
@@ -34,11 +38,11 @@ internal static class GoogleLogin
     {
         using var input = JsonDocument.Parse(await File.ReadAllBytesAsync(file, ct));
         if (!input.RootElement.TryGetProperty("installed", out var installed))
-            throw new ArgumentException("Выберите JSON OAuth-клиента типа Desktop app.");
+            throw new LocalizedArgumentException(PhraseFor("DesktopJsonRequired"));
         var id = installed.TryGetProperty("client_id", out var client) ? client.GetString() : null;
         var secret = installed.TryGetProperty("client_secret", out var key) ? key.GetString() : null;
         if (string.IsNullOrWhiteSpace(id) || !id.EndsWith(".apps.googleusercontent.com", StringComparison.Ordinal))
-            throw new ArgumentException("В JSON отсутствует действительный client_id Google.");
+            throw new LocalizedArgumentException(PhraseFor("InvalidClientId"));
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromMinutes(5));
@@ -85,11 +89,11 @@ internal static class GoogleLogin
                 !first[1].StartsWith("/oauth?", StringComparison.Ordinal)) continue;
             var query = HttpUtility.ParseQueryString(first[1][6..]);
             if (query["state"] != state) continue;
-            var page = Encoding.UTF8.GetBytes("Вернитесь в приложение «Диск Загрузки».");
+            var page = Encoding.UTF8.GetBytes(Tr("ReturnToApp"));
             var headers = Encoding.ASCII.GetBytes($"HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: {page.Length}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n");
             await stream.WriteAsync(headers, token);
             await stream.WriteAsync(page, token);
-            code = query["code"] ?? throw new DriveFailure("Вход Google не завершён. Повторите подключение.");
+            code = query["code"] ?? throw new DriveFailure(PhraseFor("LoginIncomplete"));
             break;
         }
         var values = new Dictionary<string, string>
@@ -100,7 +104,7 @@ internal static class GoogleLogin
         if (!string.IsNullOrEmpty(secret)) values["client_secret"] = secret;
         var response = await Token(values, token);
         if (string.IsNullOrEmpty(response.RefreshToken))
-            throw new DriveFailure("Google не выдал разрешение для повторного входа. Подключите аккаунт ещё раз.");
+            throw new DriveFailure(PhraseFor("NoRepeatPermission"));
         return new(id, secret, response.RefreshToken, null);
     }
 
@@ -111,13 +115,13 @@ internal static class GoogleLogin
         if (!response.IsSuccessStatusCode)
         {
             if ((int)response.StatusCode >= 500 || (int)response.StatusCode == 429)
-                throw new DriveFailure("Google временно не обновляет подключение.", retry: true);
-            throw new DriveFailure("Google отклонил подключение. Проверьте OAuth-клиент и войдите снова.",
+                throw new DriveFailure(PhraseFor("RefreshUnavailable"), retry: true);
+            throw new DriveFailure(PhraseFor("RefreshRejected"),
                 reconnect: true);
         }
         var result = await response.Content.ReadFromJsonAsync<TokenResult>(Json, ct);
         return !string.IsNullOrEmpty(result?.AccessToken) ? result :
-            throw new DriveFailure("Google не вернул токен доступа.", reconnect: true);
+            throw new DriveFailure(PhraseFor("MissingAccessToken"), reconnect: true);
     }
 
     public static string Query(IEnumerable<KeyValuePair<string, string>> values) =>
@@ -166,7 +170,7 @@ internal sealed class GoogleDrive(Credentials credentials, HttpClient? transport
             ["fields"] = Fields, ["supportsAllDrives"] = "true"
         }, null, id, ct);
         return await r.Content.ReadFromJsonAsync<RemoteFile>(GoogleLogin.Json, ct)
-            ?? throw new IOException("Drive вернул пустые сведения о файле.");
+            ?? throw new LocalizedIOException(PhraseFor("MissingFileInfo"));
     }
 
     public async Task<List<RemoteFile>> Children(RemoteFile folder, CancellationToken ct)
@@ -188,8 +192,8 @@ internal sealed class GoogleDrive(Credentials credentials, HttpClient? transport
         {
             using var r = await Request("files", query, null, folder.Id, ct);
             var page = await r.Content.ReadFromJsonAsync<DrivePage>(GoogleLogin.Json, ct)
-                ?? throw new IOException("Drive вернул пустой список файлов.");
-            if (page.IncompleteSearch) throw new DriveFailure("Google вернул неполный список папки. Повторяем запрос.", retry: true);
+                ?? throw new LocalizedIOException(PhraseFor("MissingFileList"));
+            if (page.IncompleteSearch) throw new DriveFailure(PhraseFor("IncompleteSearch"), retry: true);
             files.AddRange(page.Files ?? []);
             if (string.IsNullOrEmpty(page.NextPageToken)) return files;
             query["pageToken"] = page.NextPageToken;
@@ -245,17 +249,17 @@ internal sealed class GoogleDrive(Credentials credentials, HttpClient? transport
             body.Contains("rateLimitExceeded", StringComparison.OrdinalIgnoreCase) ||
             body.Contains("dailyLimitExceeded", StringComparison.OrdinalIgnoreCase) ||
             body.Contains("quotaExceeded", StringComparison.OrdinalIgnoreCase))
-            return new("Google Drive ограничил скачивание. Ожидаем следующей попытки.", retry: true, quota: true, delay: delay);
+            return new(PhraseFor("Quota"), retry: true, quota: true, delay: delay);
         if (code >= 500 || code == 408)
-            return new($"Google Drive временно недоступен (HTTP {code}).", retry: true, delay: delay);
+            return new(PhraseFor("DriveUnavailable").Format(code), retry: true, delay: delay);
         if (code == 401)
-            return new("Подключите аккаунт Google заново.", reconnect: true);
+            return new(PhraseFor("Reconnect"), reconnect: true);
         if (body.Contains("accessNotConfigured", StringComparison.OrdinalIgnoreCase) ||
             body.Contains("SERVICE_DISABLED", StringComparison.OrdinalIgnoreCase))
-            return new("В проекте Google Cloud нужно включить Google Drive API.", reconnect: true);
-        if (code == 404) return new("Папка или файл недоступны. Проверьте ссылку и аккаунт Google.");
-        if (code == 403) return new("Google Drive запретил скачивание этого объекта. Проверьте доступ.");
-        return new($"Google Drive отклонил запрос (HTTP {code}).");
+            return new(PhraseFor("EnableDriveApi"), reconnect: true);
+        if (code == 404) return new(PhraseFor("ItemUnavailable"));
+        if (code == 403) return new(PhraseFor("DownloadForbidden"));
+        return new(PhraseFor("RequestRejected").Format(code));
     }
 
     private async Task<string?> AccessToken(CancellationToken ct)

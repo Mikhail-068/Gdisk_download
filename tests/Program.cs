@@ -160,6 +160,16 @@ try
     catch (ArgumentException) { }
     Console.WriteLine("PASS quota classification, Retry-After, and folder URL validation");
 
+    var retryText = L.PhraseFor("RetryAt").Format(failure.Text, new DateTime(2026, 1, 1, 8, 30, 0));
+    Assert(retryText.Current.Contains("Повтор в 08:30:00") && DownloadEngine.BytesFormat(1536) == "1,5 КБ",
+        "Russian retry status and number format");
+    L.IsEnglish = true;
+    Assert(retryText.Current.Contains("Retrying at 08:30:00") &&
+        failure.Message.StartsWith("Google Drive limited downloads") && DownloadEngine.BytesFormat(1536) == "1.5 KB",
+        "already captured errors and retry times can be displayed in English");
+    L.IsEnglish = false;
+    Console.WriteLine("PASS live language selection for existing retry statuses and units");
+
     selectionFixture = true;
     var selectedFolder = Path.Combine(root, "выборочно");
     using (var preview = new GoogleDrive(creds, transport))

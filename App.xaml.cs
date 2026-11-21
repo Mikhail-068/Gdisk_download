@@ -11,10 +11,11 @@ public partial class App : Application
 
     protected override void OnStartup(StartupEventArgs e)
     {
+        L.IsEnglish = State.ReadEnglishPreference();
         singleInstance = new Mutex(true, @"Local\DriveDownload-Windows", out var first);
         if (!first)
         {
-            MessageBox.Show("Загрузчик уже открыт.", "Диск Загрузки");
+            MessageBox.Show(L.Tr("AlreadyOpen"), L.Tr("AppTitle"));
             Shutdown();
             return;
         }

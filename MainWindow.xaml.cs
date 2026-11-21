@@ -1,14 +1,14 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Globalization;
 using System.IO;
-using System.Net.Http;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.Win32;
+
+using static DriveDownload.L;
 
 namespace DriveDownload;
 
@@ -26,10 +26,12 @@ public partial class MainWindow : Window
     private double avgSpeed;
     private bool closing;
     private bool connecting;
+    private Phrase status = PhraseFor("EnterLink");
 
     public MainWindow()
     {
         InitializeComponent();
+        UpdateLanguageLabel();
         SourceInitialized += (_, _) =>
         {
             DarkChrome.Apply(this);
@@ -43,6 +45,46 @@ public partial class MainWindow : Window
         Closing += OnClosing;
     }
 
+    private void OpenLanguageMenu(object sender, RoutedEventArgs e)
+    {
+        LanguageButton.ContextMenu.PlacementTarget = LanguageButton;
+        LanguageButton.ContextMenu.IsOpen = true;
+    }
+
+    private void LanguageMenuOpened(object sender, RoutedEventArgs e)
+    {
+        foreach (MenuItem item in LanguageButton.ContextMenu.Items)
+            item.IsChecked = Equals(item.Tag, IsEnglish ? "en" : "ru");
+    }
+
+    private void SelectLanguage(object sender, RoutedEventArgs e)
+    {
+        var english = Equals(((MenuItem)sender).Tag, "en");
+        if (english == IsEnglish) return;
+
+        IsEnglish = english;
+        LocalizedView.Instance.Refresh();
+        UpdateLanguageLabel();
+        SetAccount();
+        UpdateStartLabel();
+        UpdatePauseLabel();
+        UpdateProgress(refreshLanguage: true);
+        SetStatus(status);
+        try { State.WriteLanguage(english); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            SetStatus(PhraseFor("LanguageSaveFailed"));
+        }
+    }
+
+    private void UpdateLanguageLabel() => LanguageLabel.Text = IsEnglish ? "English" : "Русский";
+
+    private void SetStatus(Phrase message)
+    {
+        status = message;
+        StatusBar.Text = message.Current;
+    }
+
     private async void OnLoaded(object sender, RoutedEventArgs args)
     {
         try
@@ -52,7 +94,7 @@ public partial class MainWindow : Window
         }
         catch (Exception)
         {
-            StatusBar.Text = "Сохранённые настройки не открылись. Проверьте подключение и папку.";
+            SetStatus(PhraseFor("SavedSettingsFailed"));
         }
         Link.Text = job?.Link ?? "";
         Destination.Text = job?.Destination ?? Path.Combine(
@@ -60,13 +102,13 @@ public partial class MainWindow : Window
         SetAccount();
         if (job is { RunOnOpen: true } && credentials?.Ready == true) await StartJob(job);
         else if (job is { RunOnOpen: true })
-            StatusBar.Text = "Подключите Google, чтобы продолжить сохранённую загрузку.";
+            SetStatus(PhraseFor("ConnectToResume"));
     }
 
     private void SetAccount()
     {
-        AccountStatus.Text = !string.IsNullOrEmpty(credentials?.RefreshToken) ? "Google подключён" :
-            credentials?.Ready == true ? "Доступ по ключу API" : "Google не подключён";
+        AccountStatus.Text = !string.IsNullOrEmpty(credentials?.RefreshToken) ? Tr("Connected") :
+            credentials?.Ready == true ? Tr("ApiAccess") : Tr("NotConnected");
         AccountLamp.Fill = (Brush)FindResource(credentials?.Ready == true ? "SuccessBrush" : "ErrorBrush");
     }
 
@@ -81,8 +123,7 @@ public partial class MainWindow : Window
         operation = stop;
         connecting = true;
         SetBusy(true);
-        StatusBar.Text = dialog.CredentialFile is null ?
-            "Сохраняем ключ API…" : "Завершите вход в Google в браузере.";
+        SetStatus(PhraseFor(dialog.CredentialFile is null ? "SavingKey" : "FinishLogin"));
         try
         {
             var value = dialog.CredentialFile is string file
@@ -91,16 +132,16 @@ public partial class MainWindow : Window
             State.WriteCredentials(value);
             credentials = value;
             SetAccount();
-            StatusBar.Text = "Подключение сохранено.";
+            SetStatus(PhraseFor("ConnectionSaved"));
             return true;
         }
         catch (OperationCanceledException)
         {
-            StatusBar.Text = "Подключение отменено или время входа истекло.";
+            SetStatus(PhraseFor("ConnectionCanceled"));
         }
-        catch (DriveFailure ex) { StatusBar.Text = ex.Message; }
-        catch (ArgumentException ex) { StatusBar.Text = ex.Message; }
-        catch (Exception) { StatusBar.Text = "Не удалось прочитать настройки или связаться с Google."; }
+        catch (DriveFailure ex) { SetStatus(Phrase.From(ex)); }
+        catch (ArgumentException ex) { SetStatus(Phrase.From(ex)); }
+        catch (Exception) { SetStatus(PhraseFor("ConnectionFailed")); }
         finally
         {
             operation = null;
@@ -113,7 +154,7 @@ public partial class MainWindow : Window
 
     private void BrowseClick(object sender, RoutedEventArgs e)
     {
-        var dialog = new OpenFolderDialog { Title = "Папка для загрузок", Multiselect = false };
+        var dialog = new OpenFolderDialog { Title = Tr("DownloadFolder"), Multiselect = false };
         if (Directory.Exists(Destination.Text)) dialog.InitialDirectory = Destination.Text;
         if (dialog.ShowDialog(this) == true) Destination.Text = dialog.FolderName;
     }
@@ -128,7 +169,7 @@ public partial class MainWindow : Window
         var link = Link.Text.Trim();
         FolderLink source;
         try { source = FolderLink.Parse(link); }
-        catch (ArgumentException ex) { StatusBar.Text = ex.Message; return; }
+        catch (ArgumentException ex) { SetStatus(Phrase.From(ex)); return; }
 
         if (credentials?.Ready != true && !await Configure()) return;
         if (closing) return;
@@ -143,7 +184,7 @@ public partial class MainWindow : Window
 
         if (!TryDestination(out var path))
         {
-            StatusBar.Text = "Выберите папку назначения по полному пути.";
+            SetStatus(PhraseFor("FullPathRequired"));
             Destination.Focus();
             return;
         }
@@ -151,7 +192,7 @@ public partial class MainWindow : Window
         if (!preview && resume) selected = job!.SelectedKeys;
         var next = new Job(link, path, resume ? job!.CacheId : Guid.NewGuid().ToString("N"), true, selected);
         try { State.WriteJob(next); }
-        catch (Exception) { StatusBar.Text = "Windows не смог сохранить задание."; return; }
+        catch (Exception) { SetStatus(PhraseFor("SaveJobFailed")); return; }
         job = next;
         await StartJob(next);
     }
@@ -172,8 +213,8 @@ public partial class MainWindow : Window
     private void UpdateStartLabel()
     {
         var resume = TryDestination(out var path) && IsSavedLocation(Link.Text, path);
-        Start.Content = !resume ? "Скачать всё" : job!.SelectedKeys is null ?
-            "Скачать / продолжить" : "Продолжить выбранное";
+        Start.Content = !resume ? Tr("DownloadAll") : job!.SelectedKeys is null ?
+            Tr("DownloadResume") : Tr("ResumeSelected");
     }
     private static bool SameFolder(string previous, string current)
     {
@@ -196,7 +237,7 @@ public partial class MainWindow : Window
         SetBusy(true);
         UpdateProgress();
         timer.Start();
-        string? result = null;
+        Phrase? result = null;
         try
         {
             await Task.Run(() => task.Run(stop.Token), stop.Token);
@@ -204,21 +245,21 @@ public partial class MainWindow : Window
         }
         catch (OperationCanceledException) when (stop.IsCancellationRequested)
         {
-            result = "Пауза. Полученные данные сохранены.";
+            result = PhraseFor("Paused");
         }
         catch (DriveFailure ex)
         {
-            result = ex.Message;
+            result = Phrase.From(ex);
             StorePaused();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
-            result = ex.Message;
+            result = Phrase.From(ex);
             StorePaused();
         }
         catch (Exception)
         {
-            result = "Ошибка загрузчика. Сохранённые данные можно использовать при повторном запуске.";
+            result = PhraseFor("DownloadFailed");
             StorePaused();
         }
         finally
@@ -226,7 +267,7 @@ public partial class MainWindow : Window
             timer.Stop();
             operation = null;
             UpdateProgress();
-            if (result is not null) StatusBar.Text = result;
+            if (result is not null) SetStatus(result);
             SetBusy(false);
             if (closing) Close();
         }
@@ -265,7 +306,7 @@ public partial class MainWindow : Window
         ChooseFiles.IsEnabled = !busy;
         UpdateStartLabel();
         Pause.IsEnabled = busy;
-        Pause.Content = connecting ? "Отменить вход" : "Пауза";
+        UpdatePauseLabel();
         Pause.Tag = FindResource(connecting ? "CloseIcon" : "PauseIcon");
         Browse.IsEnabled = !busy;
         Link.IsReadOnly = busy;
@@ -273,17 +314,19 @@ public partial class MainWindow : Window
         Account.IsEnabled = !busy;
     }
 
+    private void UpdatePauseLabel() => Pause.Content = Tr(connecting ? "CancelLogin" : "Pause");
+
     private void OpenFolderClick(object sender, RoutedEventArgs e)
     {
         var path = engine?.LocalFolder ?? Destination.Text;
         if (Directory.Exists(path))
         {
             try { Process.Start(new ProcessStartInfo(path) { UseShellExecute = true }); }
-            catch (Exception) { StatusBar.Text = "Windows не смог открыть папку."; }
+            catch (Exception) { SetStatus(PhraseFor("OpenFolderFailed")); }
         }
     }
 
-    private void UpdateProgress()
+    private void UpdateProgress(bool refreshLanguage = false)
     {
         if (engine is null) return;
         var files = engine.Entries;
@@ -301,43 +344,46 @@ public partial class MainWindow : Window
         var now = DateTimeOffset.Now;
         var bytes = engine.Received;
         var seconds = Math.Max(.1, (now - lastTick).TotalSeconds);
-        avgSpeed = ((bytes - lastReceived) / seconds + avgSpeed) / 2;
-        lastReceived = bytes;
-        lastTick = now;
+        if (!refreshLanguage)
+        {
+            avgSpeed = ((bytes - lastReceived) / seconds + avgSpeed) / 2;
+            lastReceived = bytes;
+            lastTick = now;
+        }
 
         var allDone = files.Length > 0 && finished == files.Length;
         var progress = total > 0 ? (double)completed / total * 100 :
             files.Length > 0 ? (double)finished / files.Length * 100 : 0;
         Overall.Value = allDone ? 100 : Math.Clamp(progress, 0, 99);
         var format = Overall.Value is > 0 and < 10 ? "0.0" : "0";
-        Percent.Text = Overall.Value.ToString(format, CultureInfo.GetCultureInfo("ru-RU")) + "%";
-        Summary.Text = $"{DownloadEngine.BytesFormat(completed)} из {DownloadEngine.BytesFormat(total)}";
+        Percent.Text = Overall.Value.ToString(format, Culture) + "%";
+        Summary.Text = Tr("DownloadAmount", DownloadEngine.BytesFormat(completed), DownloadEngine.BytesFormat(total));
         if (operation is not null && bytes > 0 && avgSpeed >= 1024)
         {
-            var speed = $"{DownloadEngine.BytesFormat((long)avgSpeed)}/с";
+            var speed = Tr("Speed", DownloadEngine.BytesFormat((long)avgSpeed));
             var remainingSeconds = Math.Max(0, total - completed) / avgSpeed;
             TransferRate.Text = remainingSeconds >= 1 && remainingSeconds < TimeSpan.FromDays(7).TotalSeconds
-                ? $"{speed}  ·  осталось {FormatRemaining(remainingSeconds)}"
+                ? Tr("SpeedEta", speed, FormatRemaining(remainingSeconds))
                 : speed;
         }
         else
         {
-            TransferRate.Text = allDone ? "Передача завершена" : "Скорость появится при загрузке";
+            TransferRate.Text = allDone ? Tr("TransferComplete") : Tr("InitialRate");
         }
         QueueSummary.Text = files.Length > 0
-            ? $"{finished} из {files.Length} файлов" + (errors > 0 ? $"  ·  Ошибок: {errors}" : "")
-            : "Очередь пуста";
+            ? Tr("QueueCount", finished, files.Length) + (errors > 0 ? "  ·  " + Tr("ErrorCount", errors) : "")
+            : Tr("EmptyQueue");
         Empty.Visibility = files.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
         ActivePath.Text = engine.LocalFolder ?? job?.Destination;
         OpenFolder.IsEnabled = Directory.Exists(engine.LocalFolder);
-        StatusBar.Text = engine.Message;
+        if (!refreshLanguage) SetStatus(engine.Message);
     }
 
     private static string FormatRemaining(double seconds)
     {
         var time = TimeSpan.FromSeconds(Math.Ceiling(seconds));
-        return time.TotalHours >= 1 ? $"{(int)time.TotalHours} ч {time.Minutes:D2} мин" :
-            time.TotalMinutes >= 1 ? $"{time.Minutes} мин {time.Seconds:D2} с" : $"{time.Seconds} с";
+        return time.TotalHours >= 1 ? Tr("HoursMinutes", (int)time.TotalHours, time.Minutes) :
+            time.TotalMinutes >= 1 ? Tr("MinutesSeconds", time.Minutes, time.Seconds) : Tr("Seconds", time.Seconds);
     }
     private sealed class Row(Transfer file) : INotifyPropertyChanged
     {
@@ -346,7 +392,7 @@ public partial class MainWindow : Window
         public string Amount => file.Export is null
             ? $"{DownloadEngine.BytesFormat(Interlocked.Read(ref file.Bytes))} / {DownloadEngine.BytesFormat(file.Size)}"
             : DownloadEngine.BytesFormat(Interlocked.Read(ref file.Bytes));
-        public string Status => file.Error ?? file.Status;
+        public string Status => (file.Error ?? file.Status).Current;
         public string Details => Status;
         public double Progress => file.Done ? 100 : file.Size > 0
             ? Math.Min(99, Interlocked.Read(ref file.Bytes) * 100.0 / file.Size)
@@ -357,8 +403,8 @@ public partial class MainWindow : Window
         private Brush BrushFor(string normal) => (Brush)Application.Current.FindResource(
             file.Error is not null ? "ErrorBrush" :
             file.Done ? "SuccessBrush" :
-            Status.StartsWith("Google Drive", StringComparison.Ordinal) ||
-            Status.StartsWith("Связь", StringComparison.Ordinal) ? "WarningBrush" : normal);
+            file.Status.Russian.StartsWith("Google Drive", StringComparison.Ordinal) ||
+            file.Status.Russian.StartsWith("Связь", StringComparison.Ordinal) ? "WarningBrush" : normal);
         public event PropertyChangedEventHandler? PropertyChanged;
         private string? amount;
         private string? status;
@@ -404,7 +450,7 @@ internal sealed class ConnectionWindow : Window
 
     public ConnectionWindow()
     {
-        Title = "Подключение к Google Drive";
+        Title = Tr("ConnectionTitle");
         SourceInitialized += (_, _) => DarkChrome.Apply(this);
         SetResourceReference(BackgroundProperty, "PanelBrush");
         SetResourceReference(ForegroundProperty, "TextBrush");
@@ -418,17 +464,17 @@ internal sealed class ConnectionWindow : Window
         Content = panel;
         panel.Children.Add(new TextBlock
         {
-            Text = "Вход в Google Drive", FontSize = 23, FontWeight = FontWeights.SemiBold
+            Text = Tr("SignInTitle"), FontSize = 23, FontWeight = FontWeights.SemiBold
         });
         panel.Children.Add(new TextBlock
         {
-            Text = "Для папок вашего аккаунта выберите JSON клиента OAuth Desktop app. Вход откроется в браузере. Приложение запросит доступ к Drive только для чтения.",
+            Text = Tr("OAuthInstructions"),
             TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 10, 0, 15)
         });
-        var oauth = new Button { Content = "Выбрать JSON и войти", Tag = FindResource("FolderIcon"), Padding = new Thickness(10), HorizontalAlignment = HorizontalAlignment.Left };
+        var oauth = new Button { Content = Tr("ChooseJson"), Tag = FindResource("FolderIcon"), Padding = new Thickness(10), HorizontalAlignment = HorizontalAlignment.Left };
         oauth.Click += (_, _) =>
         {
-            var file = new OpenFileDialog { Title = "OAuth-клиент Google для Desktop app", Filter = "JSON (*.json)|*.json" };
+            var file = new OpenFileDialog { Title = Tr("OAuthPickerTitle"), Filter = "JSON (*.json)|*.json" };
             if (file.ShowDialog(this) != true) return;
             CredentialFile = file.FileName;
             DialogResult = true;
@@ -436,13 +482,13 @@ internal sealed class ConnectionWindow : Window
         panel.Children.Add(oauth);
         panel.Children.Add(new TextBlock
         {
-            Text = "Для папок с публичным доступом можно использовать ключ Google Drive API.",
+            Text = Tr("ApiInstructions"),
             TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 23, 0, 8)
         });
         var key = new PasswordBox { Padding = new Thickness(8), MinHeight = 35 };
-        System.Windows.Automation.AutomationProperties.SetName(key, "Ключ Google Drive API");
+        System.Windows.Automation.AutomationProperties.SetName(key, Tr("ApiKey"));
         panel.Children.Add(key);
-        var apply = new Button { Content = "Использовать ключ API", Tag = FindResource("KeyIcon"), IsEnabled = false, Padding = new Thickness(10),
+        var apply = new Button { Content = Tr("UseApiKey"), Tag = FindResource("KeyIcon"), IsEnabled = false, Padding = new Thickness(10),
             HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 8, 0, 0) };
         key.PasswordChanged += (_, _) => apply.IsEnabled = System.Text.RegularExpressions.Regex.IsMatch(
             key.Password.Trim(), "^[A-Za-z0-9_-]{20,100}$");

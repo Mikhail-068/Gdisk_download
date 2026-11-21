@@ -5,6 +5,8 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media.Animation;
 
+using static DriveDownload.L;
+
 namespace DriveDownload;
 
 public partial class SelectionWindow : Window
@@ -43,10 +45,10 @@ public partial class SelectionWindow : Window
         SelectAll.IsEnabled = false;
         SelectNone.IsEnabled = false;
         Accept.IsEnabled = false;
-        Choice.Text = "Читаем список…";
+        Choice.Text = Tr("ReadingList");
         ContentsTree.ItemsSource = null;
         roots = [];
-        Notice.Text = "Читаем папку Google Drive…";
+        Notice.Text = Tr("ReadingFolder");
         Notice.Visibility = Visibility.Visible;
         ReadingIllustration.Visibility = Visibility.Visible;
         var animation = SystemParameters.ClientAreaAnimation
@@ -67,14 +69,14 @@ public partial class SelectionWindow : Window
             var previous = selection.ToHashSet(StringComparer.Ordinal);
             roots = catalog.Items.Select(x => new SelectionNode(x, null, previous, UpdateChoice)).ToArray();
             ContentsTree.ItemsSource = roots;
-            Notice.Text = "Папка пуста";
+            Notice.Text = Tr("EmptyFolder");
             Notice.Visibility = roots.Length > 0 ? Visibility.Collapsed : Visibility.Visible;
         }
         catch (OperationCanceledException) when (closed) { }
         catch (DriveFailure e) { Notice.Text = e.Message; }
         catch (Exception e) when (e is HttpRequestException or IOException or OperationCanceledException or System.Text.Json.JsonException)
         {
-            Notice.Text = "Не удалось прочитать папку. Проверьте связь и нажмите «Обновить».";
+            Notice.Text = Tr("ReadFailed");
         }
         finally
         {
@@ -109,9 +111,9 @@ public partial class SelectionWindow : Window
         var folders = chosen.Count(x => x.Item.IsFolder);
         var size = DownloadEngine.BytesFormat(chosen.Sum(x => x.Item.Size));
         var hasExports = chosen.Any(x => x.Item.Export is not null);
-        Choice.Text = chosen.Length == 0 ? "Ничего не выбрано" :
-            $"Файлов: {chosen.Length - folders}" + (folders > 0 ? $"   ·   Пустых папок: {folders}" : "") +
-            (hasExports ? $"   ·   Известный объём: {size}" : $"   ·   {size}");
+        Choice.Text = chosen.Length == 0 ? Tr("NothingSelected") :
+            Tr("FileCount", chosen.Length - folders) + (folders > 0 ? "   ·   " + Tr("EmptyFolderCount", folders) : "") +
+            "   ·   " + (hasExports ? Tr("KnownSize", size) : size);
         SelectAll.IsEnabled = roots.Any(x => x.Selectable);
         SelectNone.IsEnabled = chosen.Length > 0;
         Accept.IsEnabled = chosen.Length > 0;
@@ -150,10 +152,10 @@ public sealed class SelectionNode : INotifyPropertyChanged
     internal CatalogItem Item { get; }
     public SelectionNode[] Children { get; }
     public string Name => Item.Name;
-    public string Details => Item.Problem is not null ? $"{Item.Relative}\n{Item.Problem}" : Item.Relative;
+    public string Details => Item.Problem is not null ? $"{Item.Relative}\n{Item.Problem.Current}" : Item.Relative;
     public string FileKind => Item.IsFolder ? "Folder" : FileKinds.Classify(Item.Remote.MimeType, Item.Relative);
     public bool Selectable { get; }
-    public string SizeLabel => Item.Problem is not null ? "Недоступно" :
+    public string SizeLabel => Item.Problem is not null ? Tr("Unavailable") :
         Item.IsFolder || Item.Export is not null ? "" : DownloadEngine.BytesFormat(Item.Size);
 
     public bool? Checked
