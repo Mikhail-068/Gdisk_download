@@ -1,0 +1,175 @@
+<Window x:Class="DriveDownload.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Диск Загрузки" Width="960" Height="770" MinWidth="680" MinHeight="640"
+        WindowStartupLocation="CenterScreen" Background="{StaticResource CanvasBrush}"
+        FontFamily="Segoe UI Variable Text, Segoe UI" FontSize="14"
+        Foreground="{StaticResource TextBrush}" UseLayoutRounding="True" SnapsToDevicePixels="True">
+  <Grid>
+    <Grid MaxWidth="880" Margin="28,24,28,22">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="*"/>
+      </Grid.RowDefinitions>
+      <StackPanel Orientation="Horizontal" Margin="1,0,0,19">
+        <Border Width="48" Height="48" CornerRadius="14" Background="{StaticResource ControlBrush}"
+                Margin="0,0,13,0" BorderBrush="{StaticResource Rule}" BorderThickness="1">
+          <Image Name="DriveMark" Source="pack://application:,,,/DriveDownload;component/Assets/GoogleDrive.png"
+                 Width="34" Height="34" VerticalAlignment="Center" HorizontalAlignment="Center"
+                 ToolTip="Источник файлов Google Drive" AutomationProperties.Name="Google Drive"/>
+        </Border>
+        <StackPanel>
+          <TextBlock Text="Диск Загрузки" FontSize="27" FontWeight="SemiBold"/>
+          <TextBlock Text="Загрузка папок Google Drive" Foreground="{StaticResource Muted}" FontSize="13" Margin="0,2,0,0"/>
+        </StackPanel>
+      </StackPanel>
+
+      <Border Grid.Row="1" Name="SetupPanel" Background="{StaticResource PanelBrush}" CornerRadius="19"
+              BorderBrush="{StaticResource Rule}" BorderThickness="1" Padding="19" Margin="0,0,0,15">
+        <Grid>
+          <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+          </Grid.RowDefinitions>
+          <Label Grid.ColumnSpan="2" Target="{Binding ElementName=Link}" Content="Ссылка на папку Google Drive"/>
+          <Grid Grid.Row="1" Grid.ColumnSpan="2">
+            <TextBox Name="Link" FontFamily="Cascadia Mono, Consolas" FontSize="13"
+                     AutomationProperties.Name="Ссылка на папку Google Drive"/>
+            <TextBlock Text="https://drive.google.com/drive/folders/…" Margin="11,0,0,0" IsHitTestVisible="False"
+                       VerticalAlignment="Center" FontFamily="Cascadia Mono, Consolas" FontSize="13"
+                       Foreground="{StaticResource Muted}">
+              <TextBlock.Style>
+                <Style TargetType="TextBlock">
+                  <Setter Property="Visibility" Value="Collapsed"/>
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding Text, ElementName=Link}" Value="">
+                      <Setter Property="Visibility" Value="Visible"/>
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </TextBlock.Style>
+            </TextBlock>
+          </Grid>
+          <Label Grid.Row="2" Target="{Binding ElementName=Destination}" Content="Куда сохранить" Margin="0,11,0,0"/>
+          <TextBox Grid.Row="3" Name="Destination" AutomationProperties.Name="Папка назначения" Margin="0,0,9,0"/>
+          <Button Grid.Row="3" Grid.Column="1" Name="Browse" Tag="{StaticResource FolderIcon}" Click="BrowseClick" Content="Выбрать папку…"/>
+          <Grid Grid.Row="4" Grid.ColumnSpan="2" Margin="0,12,0,12">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <TextBlock Text="Доступ к Google Drive" Foreground="{StaticResource Muted}" VerticalAlignment="Center"/>
+            <Button Grid.Column="1" Name="Account" Tag="{StaticResource LinkIcon}" Click="AccountClick" Content="Подключить Google" Padding="12,6" MinHeight="32"/>
+          </Grid>
+          <Grid Grid.Row="5" Grid.ColumnSpan="2">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+            <Button Name="ChooseFiles" Click="ChooseFilesClick" Content="Выбрать файлы…" Tag="{StaticResource ChecklistIcon}"
+                    Margin="0,0,9,0" MinHeight="43"/>
+            <Button Grid.Column="1" Name="Start" Click="StartClick" Content="Скачать всё" Tag="{StaticResource DownloadIcon}"
+                    Style="{StaticResource Primary}" MinHeight="43"/>
+          </Grid>
+        </Grid>
+      </Border>
+
+      <Border Grid.Row="1" Name="ActivePanel" Visibility="Collapsed"
+              Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource Rule}"
+              BorderThickness="1" CornerRadius="13" Padding="15,11" Margin="0,0,0,15">
+        <Grid>
+          <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+          <StackPanel Margin="0,0,12,0">
+            <TextBlock Text="Папка на компьютере" FontSize="11" Foreground="{StaticResource Muted}"/>
+            <TextBlock Name="ActivePath" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Margin="0,3,0,0"
+                       ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
+          </StackPanel>
+          <Border Grid.Column="1" Background="{StaticResource AlternateBrush}" CornerRadius="7"
+                  Padding="10,5" VerticalAlignment="Center">
+            <TextBlock Text="{Binding Content, ElementName=Account}" Foreground="{StaticResource SuccessBrush}" FontSize="12"/>
+          </Border>
+        </Grid>
+      </Border>
+
+      <Border Grid.Row="2" Background="{StaticResource PanelBrush}" CornerRadius="19"
+              BorderBrush="{StaticResource Rule}" BorderThickness="1" Padding="19">
+        <Grid>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/><RowDefinition Height="Auto"/>
+          </Grid.RowDefinitions>
+          <Grid Margin="0,0,0,10">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+            <TextBlock Name="Percent" Text="0%" FontSize="41" FontWeight="SemiBold" VerticalAlignment="Center"
+                       AutomationProperties.Name="Процент загрузки"/>
+            <StackPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="12,0,0,0">
+              <TextBlock Name="Summary" Text="0 Б загружено" FontWeight="SemiBold" TextAlignment="Right"
+                         FontFamily="Cascadia Mono, Consolas" FontSize="13"/>
+              <TextBlock Name="TransferRate" Text="Скорость появится при загрузке" Foreground="{StaticResource Muted}"
+                         TextAlignment="Right" FontSize="12" Margin="0,4,0,0"/>
+            </StackPanel>
+          </Grid>
+          <ProgressBar Grid.Row="1" Name="Overall" Minimum="0" Maximum="100" Height="13"
+                       Style="{StaticResource TransferBar}" Foreground="{StaticResource TransferGradient}"
+                       AutomationProperties.Name="Общий прогресс загрузки"/>
+          <Grid Grid.Row="2" Margin="0,12,0,11">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <Button Name="Pause" Tag="{StaticResource PauseIcon}" Click="PauseClick" Content="Пауза" IsEnabled="False" Padding="13,6" MinHeight="32"/>
+            <TextBlock Grid.Column="1" Name="StatusBar" Text="Вставьте ссылку на папку" VerticalAlignment="Center"
+                       Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="11,0" MaxHeight="42"
+                       ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
+            <Button Grid.Column="2" Name="OpenFolder" Tag="{StaticResource OpenFolderIcon}" Content="Открыть папку" Click="OpenFolderClick"
+                    IsEnabled="False" Padding="13,6" MinHeight="32"/>
+          </Grid>
+          <Border Grid.Row="3" BorderBrush="{StaticResource Rule}" BorderThickness="0,1,0,0">
+            <Grid>
+              <DataGrid Name="Queue" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column"
+                        RowHeight="40" Background="{StaticResource PanelBrush}" RowStyle="{StaticResource QueueRow}"
+                        AlternationCount="2" FontSize="13"
+                        Foreground="{StaticResource TextBrush}" GridLinesVisibility="Horizontal"
+                        HorizontalGridLinesBrush="{StaticResource GridLineBrush}" BorderThickness="0"
+                        CanUserAddRows="False" CanUserSortColumns="False" CanUserReorderColumns="False"
+                        VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
+                        SelectionMode="Single" SelectionUnit="FullRow">
+                <DataGrid.Resources>
+                  <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#30496B"/>
+                  <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#283951"/>
+                  <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="#E8EAED"/>
+                  <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="#E8EAED"/>
+                </DataGrid.Resources>
+                <DataGrid.Columns>
+                  <DataGridTemplateColumn Header="Файл" Width="*" MinWidth="220">
+                    <DataGridTemplateColumn.CellTemplate>
+                      <DataTemplate>
+                        <Grid>
+                          <Grid.ColumnDefinitions><ColumnDefinition Width="24"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                          <Path Width="15" Height="15" HorizontalAlignment="Left" VerticalAlignment="Center"
+                                Style="{StaticResource FileIconStyle}"/>
+                          <TextBlock Grid.Column="1" Text="{Binding Path}" Style="{StaticResource CellText}"/>
+                        </Grid>
+                      </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                  </DataGridTemplateColumn>
+                  <DataGridTemplateColumn Header="Загружено" Width="164">
+                    <DataGridTemplateColumn.CellTemplate>
+                      <DataTemplate>
+                        <Grid>
+                          <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="3"/></Grid.RowDefinitions>
+                          <TextBlock Text="{Binding Amount}" FontFamily="Cascadia Mono, Consolas" FontSize="11"
+                                     Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" Margin="0,0,0,3"/>
+                          <ProgressBar Grid.Row="1" Value="{Binding Progress, Mode=OneWay}" Style="{StaticResource TransferBar}"
+                                       Foreground="{Binding ProgressTone}" AutomationProperties.Name="Прогресс файла"/>
+                        </Grid>
+                      </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                  </DataGridTemplateColumn>
+                  <DataGridTextColumn Header="Состояние" Binding="{Binding Status}" Width="169" ElementStyle="{StaticResource StatusText}"/>
+                </DataGrid.Columns>
+              </DataGrid>
+              <TextBlock Name="Empty" Text="Файлы появятся после чтения папки" Foreground="{StaticResource Muted}"
+                         HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False" Margin="0,29,0,0"/>
+            </Grid>
+          </Border>
+          <TextBlock Grid.Row="4" Name="QueueSummary" Text="Очередь пуста" Foreground="{StaticResource Muted}"
+                     FontSize="12" Margin="10,9,0,0"/>
+        </Grid>
+      </Border>
+    </Grid>
+  </Grid>
+</Window>

@@ -1,0 +1,21 @@
+# Сборка .NET и локальная публикация
+bin/
+obj/
+/release/
+/publish*/
+/artifacts/
+*.exe
+*.pdb
+
+# Настройки IDE
+.vs/
+*.user
+*.suo
+
+# Учётные данные и состояние загрузчика
+client_secret*.json
+credentials.json
+connection.bin
+job.json
+rclone.conf
+.drive-download/
