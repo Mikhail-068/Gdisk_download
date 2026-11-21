@@ -1,0 +1,25 @@
+name: Windows build and tests
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Build WPF application
+        run: dotnet build DriveDownload.csproj --configuration Release
+      - name: Run download checks
+        run: dotnet run --project tests/DriveDownload.Checks.csproj --configuration Release
